@@ -9,10 +9,8 @@ class VirtualWorld:
         self.rows = len(grid)
         self.cols = len(grid[0])
         self.treasure_positions = self.get_positions('Treasure')
-        self.reward_positions = self.get_positions('Reward1') + self.get_positions('Reward2')
         self.visited = set()
         self.collected_treasures = 0
-        self.collected_rewards = 0  # Track collected rewards
 
     def get_positions(self, item_type):
         positions = []
@@ -41,6 +39,7 @@ class VirtualWorld:
         cell = self.grid[position[0]][position[1]]
         if cell in self.traps:
             effect = self.traps[cell]
+            print(f"Encountered {cell} at position {position}. Effect: {effect}")
             if effect == 'increase_gravity':
                 energy *= 2
             elif effect == 'decrease_speed':
@@ -51,6 +50,7 @@ class VirtualWorld:
                 self.treasure_positions = []
         elif cell in self.rewards:
             effect = self.rewards[cell]
+            print(f"Encountered {cell} at position {position}. Effect: {effect}")
             if effect == 'decrease_gravity':
                 energy /= 2
             elif effect == 'increase_speed':
@@ -60,13 +60,19 @@ class VirtualWorld:
     def gbfs(self):
         total_cost = 0
         treasures_to_find = len(self.treasure_positions)
-        rewards_to_find = len(self.reward_positions)
+        max_iterations = 10000  # Maximum number of iterations to prevent infinite loops
+        iteration = 0
 
-        while self.collected_rewards < rewards_to_find:
+        while self.collected_treasures < treasures_to_find and iteration < max_iterations:
             queue = [(0, self.entry, 1, 1)]  # (cost, position, energy, steps)
             self.visited = set()
 
-            while queue:
+            while queue and self.collected_treasures < treasures_to_find:
+                iteration += 1
+                if iteration >= max_iterations:
+                    print("Reached maximum iteration limit, stopping search.")
+                    break
+
                 # Shuffle the directions for random exploration
                 directions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
                 random.shuffle(directions)
@@ -81,13 +87,6 @@ class VirtualWorld:
                     self.entry = position  # Start next search from the current treasure position
                     print(f"Found treasure at position {position}. Total cost so far: {total_cost}")
 
-                if position in self.reward_positions:
-                    total_cost += cost
-                    self.reward_positions.remove(position)
-                    self.collected_rewards += 1
-                    self.entry = position  # Start next search from the current reward position
-                    print(f"Found reward at position {position}. Total cost so far: {total_cost}")
-
                 self.visited.add(position)
                 for dr, dc in directions:
                     new_r, new_c = position[0] + dr, position[1] + dc
@@ -95,11 +94,11 @@ class VirtualWorld:
                         new_position = (new_r, new_c)
                         new_position, new_energy, new_steps = self.apply_effects(new_position, energy, steps)
                         new_cost = cost + new_energy
-                        # Prioritize rewards by decreasing cost when encountering a reward
-                        if new_position in self.reward_positions:
-                            new_cost -= new_energy  # Decrease cost to prioritize paths with rewards
                         # Insert the new state into the queue maintaining sorted order
                         self.insert_sorted(queue, (new_cost, new_position, new_energy, new_steps))
+
+        if self.collected_treasures < treasures_to_find:
+            print("Could not find all treasures within iteration limit.")
 
         return total_cost
 
@@ -173,5 +172,5 @@ total_cost = virtual_world.gbfs()
 # Print final grid state
 virtual_world.print_grid()
 
-print(f"\nTotal cost to find all treasures and rewards: {total_cost}")
+print(f"\nTotal cost to find all treasures: {total_cost}")
 
