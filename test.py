@@ -11,6 +11,7 @@ class VirtualWorld:
         self.treasure_positions = self.get_positions('Treasure')
         self.visited = set()
         self.collected_treasures = 0
+        self.max_iterations = 10000  # Prevent infinite loops
 
     def get_positions(self, item_type):
         positions = []
@@ -35,7 +36,7 @@ class VirtualWorld:
     def in_bounds(self, r, c):
         return 0 <= r < self.rows and 0 <= c < self.cols
 
-    def apply_effects(self, position, energy, steps):
+    def apply_effects(self, position, energy, steps, last_move):
         cell = self.grid[position[0]][position[1]]
         if cell in self.traps:
             effect = self.traps[cell]
@@ -45,31 +46,35 @@ class VirtualWorld:
             elif effect == 'decrease_speed':
                 steps *= 2
             elif effect == 'move_two_cells':
-                position = (position[0] + 2, position[1])  # Assuming last direction was right for simplicity
+                new_r = position[0] + 2 * last_move[0]
+                new_c = position[1] + 2 * last_move[1]
+                if self.in_bounds(new_r, new_c):
+                    position = (new_r, new_c)
+                else:
+                    position = (new_r - last_move[0], new_c - last_move[1])  # Move one cell back if out of bounds
             elif effect == 'remove_treasures':
                 self.treasure_positions = []
         elif cell in self.rewards:
             effect = self.rewards[cell]
             print(f"Encountered {cell} at position {position}. Effect: {effect}")
             if effect == 'decrease_gravity':
-                energy /= 2
+                energy = max(1, energy // 2)  # Prevent energy from becoming zero
             elif effect == 'increase_speed':
-                steps /= 2
+                steps = max(1, steps // 2)  # Prevent steps from becoming zero
         return position, energy, steps
 
     def gbfs(self):
         total_cost = 0
         treasures_to_find = len(self.treasure_positions)
-        max_iterations = 10000  # Maximum number of iterations to prevent infinite loops
         iteration = 0
 
-        while self.collected_treasures < treasures_to_find and iteration < max_iterations:
+        while self.collected_treasures < treasures_to_find and iteration < self.max_iterations:
             queue = [(0, self.entry, 1, 1)]  # (cost, position, energy, steps)
             self.visited = set()
 
             while queue and self.collected_treasures < treasures_to_find:
                 iteration += 1
-                if iteration >= max_iterations:
+                if iteration >= self.max_iterations:
                     print("Reached maximum iteration limit, stopping search.")
                     break
 
@@ -90,9 +95,10 @@ class VirtualWorld:
                 self.visited.add(position)
                 for dr, dc in directions:
                     new_r, new_c = position[0] + dr, position[1] + dc
-                    if self.in_bounds(new_r, new_c) and (new_r, new_c) not in self.visited:
-                        new_position = (new_r, new_c)
-                        new_position, new_energy, new_steps = self.apply_effects(new_position, energy, steps)
+                    new_position = (new_r, new_c)
+                    if self.in_bounds(new_r, new_c) and new_position not in self.visited:
+                        self.visited.add(new_position)
+                        new_position, new_energy, new_steps = self.apply_effects(new_position, energy, steps, (dr, dc))
                         new_cost = cost + new_energy
                         # Insert the new state into the queue maintaining sorted order
                         self.insert_sorted(queue, (new_cost, new_position, new_energy, new_steps))
