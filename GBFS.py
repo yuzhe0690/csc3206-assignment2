@@ -139,10 +139,12 @@ def randomize_grid(grid):
 
 # Define the initial grid and effects
 initial_grid = [
-    ['Empty', 'Empty', 'Trap1', 'Empty', 'Reward1', 'Empty', 'Trap2', 'Empty'],
-    ['Empty', 'Obstacle', 'Empty', 'Empty', 'Empty', 'Obstacle', 'Empty', 'Trap3'],
-    ['Reward2', 'Empty', 'Empty', 'Obstacle', 'Empty', 'Trap4', 'Empty', 'Treasure'],
-    ['Empty', 'Empty', 'Empty', 'Empty', 'Obstacle', 'Empty', 'Empty', 'Empty']
+    ['Empty','Empty','Empty','Reward1','Empty','Empty','Empty', 'Empty','Empty','Empty'],
+    ['Empty','Trap2','Empty','Trap4','Treasure','Empty','Trap3','Empty','Obstacle','Empty'],
+    ['Empty','Empty','Obstacle','Empty','Obstacle','Empty','Empty','Reward2','Trap1','Empty'],
+    ['Obstacle','Reward1','Empty','Obstacle','Empty','Trap3','Obstacle','Treasure','Empty','Treasure'],
+    ['Empty','Empty','Trap2','Treasure','Obstacle','Empty','Obstacle','Obstacle','Empty','Empty'],
+    ['Empty','Empty','Empty','Empty','Empty','Reward2','Empty','Empty','Empty','Empty']
 ]
 
 traps = {
