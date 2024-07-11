@@ -2,6 +2,7 @@ import random
 
 class VirtualWorld:
     def __init__(self, grid, traps, rewards, entry):
+        # Initialize the virtual world with the grid, traps, rewards, and entry point
         self.grid = grid
         self.traps = traps
         self.rewards = rewards
@@ -11,8 +12,10 @@ class VirtualWorld:
         self.treasure_positions = self.get_positions('Treasure')
         self.visited = set()
         self.collected_treasures = 0
+        self.position_tracker = []
 
     def get_positions(self, item_type):
+        # Get the positions of a specific item type in the grid
         positions = []
         for r in range(self.rows):
             for c in range(self.cols):
@@ -21,6 +24,7 @@ class VirtualWorld:
         return positions
 
     def count_elements(self):
+        # Count the occurrences of each element type in the grid
         counts = {
             'Treasure': len(self.get_positions('Treasure')),
             'Reward1': len(self.get_positions('Reward1')),
@@ -33,92 +37,113 @@ class VirtualWorld:
         return counts
 
     def in_bounds(self, r, c):
+        # Check if a position is within the bounds of the grid
         return 0 <= r < self.rows and 0 <= c < self.cols
 
     def apply_effects(self, position, energy, steps):
+        # Apply the effects of traps or rewards encountered at a position
         cell = self.grid[position[0]][position[1]]
+        effect = None
+        applied_effect_name = None
+
         if cell in self.traps:
+            # If the cell is a trap, apply the corresponding effect
             effect = self.traps[cell]
-            print(f"Encountered {cell} at position {position}. Effect: {effect}")
+            applied_effect_name = f"Trap '{cell}' effect '{effect}'"
             if effect == 'increase_gravity':
                 energy *= 2
             elif effect == 'decrease_speed':
                 steps *= 2
             elif effect == 'move_two_cells':
-                position = (position[0] + 2, position[1])  # Assuming last direction was right for simplicity
+                for dr, dc in [(2, 0), (0, 2), (-2, 0), (0, -2)]:
+                    new_r, new_c = position[0] + dr, position[1] + dc
+                    if self.in_bounds(new_r, new_c):
+                        position = (new_r, new_c)
+                        break
             elif effect == 'remove_treasures':
                 self.treasure_positions = []
         elif cell in self.rewards:
+            # If the cell is a reward, apply the corresponding effect
             effect = self.rewards[cell]
-            print(f"Encountered {cell} at position {position}. Effect: {effect}")
+            applied_effect_name = f"Reward '{cell}' effect '{effect}'"
             if effect == 'decrease_gravity':
                 energy /= 2
             elif effect == 'increase_speed':
                 steps /= 2
+
+        self.position_tracker.append((position, applied_effect_name))
         return position, energy, steps
 
+    def heuristic(self, position):
+        # Heuristic function: Manhattan distance to the nearest treasure
+        if not self.treasure_positions:
+            return float('inf')
+        return min(abs(position[0] - t[0]) + abs(position[1] - t[1]) for t in self.treasure_positions)
+
     def gbfs(self):
+        # Greedy Best-First Search (GBFS) algorithm to find all treasures
         total_cost = 0
         treasures_to_find = len(self.treasure_positions)
-        max_iterations = 10000  # Maximum number of iterations to prevent infinite loops
-        iteration = 0
+        encountered_remove_treasures_trap = False
 
-        while self.collected_treasures < treasures_to_find and iteration < max_iterations:
-            queue = [(0, self.entry, 1, 1)]  # (cost, position, energy, steps)
-            self.visited = set()
+        # Priority queue (list) initialized with the entry point
+        priority_queue = [(self.heuristic(self.entry), 0, self.entry, 1, 1)]
+        local_visited = set()
 
-            while queue and self.collected_treasures < treasures_to_find:
-                iteration += 1
-                if iteration >= max_iterations:
-                    print("Reached maximum iteration limit, stopping search.")
-                    break
+        while self.collected_treasures < treasures_to_find and priority_queue:
+            # Sort the priority queue based on the heuristic value
+            priority_queue.sort(key=lambda x: x[0])
+            _, cost, position, energy, steps = priority_queue.pop(0)
+            print(f"Current state: cost={cost}, position={position}, energy={energy}, steps={steps}")
 
-                # Shuffle the directions for random exploration
-                directions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
-                random.shuffle(directions)
+            if position in self.visited:
+                # Skip positions that have already been visited
+                print(f"Position {position} already visited.")
+                continue
 
-                # Pop the first element (lowest cost) from the queue
-                cost, position, energy, steps = queue.pop(0)
+            self.visited.add(position)
+            local_visited.add(position)
 
-                if position in self.treasure_positions:
-                    total_cost += cost
-                    self.treasure_positions.remove(position)
-                    self.collected_treasures += 1
-                    self.entry = position  # Start next search from the current treasure position
-                    print(f"Found treasure at position {position}. Total cost so far: {total_cost}")
+            if position in self.treasure_positions:
+                # Collect treasure if the position contains a treasure
+                total_cost += cost
+                self.treasure_positions.remove(position)
+                self.collected_treasures += 1
+                self.entry = position
+                print(f"Found treasure at position {position}. Total cost so far: {total_cost}")
 
-                self.visited.add(position)
-                for dr, dc in directions:
-                    new_r, new_c = position[0] + dr, position[1] + dc
-                    if self.in_bounds(new_r, new_c) and (new_r, new_c) not in self.visited:
-                        new_position = (new_r, new_c)
-                        new_position, new_energy, new_steps = self.apply_effects(new_position, energy, steps)
-                        new_cost = cost + new_energy
-                        # Insert the new state into the queue maintaining sorted order
-                        self.insert_sorted(queue, (new_cost, new_position, new_energy, new_steps))
+            for dr, dc in [(1, 0), (0, 1), (-1, 0), (0, -1)]:
+                # Explore adjacent positions
+                new_r, new_c = position[0] + dr, position[1] + dc
+                if self.in_bounds(new_r, new_c) and (new_r, new_c) not in local_visited:
+                    new_position = (new_r, new_c)
+                    new_position, new_energy, new_steps = self.apply_effects(new_position, energy, steps)
+                    new_cost = cost + new_energy
 
-        if self.collected_treasures < treasures_to_find:
-            print("Could not find all treasures within iteration limit.")
+                    # Add new position to the priority queue
+                    priority_queue.append((self.heuristic(new_position), new_cost, new_position, new_energy, new_steps))
+
+                    if new_position != position:
+                        # Print applied effect information if the position changes due to an effect
+                        print(f"Applied effect '{self.position_tracker[-1][1]}' at position {new_position}")
+
+                    if self.grid[new_position[0]][new_position[1]] in self.traps:
+                        # Check if the new position contains a trap that removes treasures
+                        trap_effect = self.traps[self.grid[new_position[0]][new_position[1]]]
+                        if trap_effect == 'remove_treasures':
+                            print(f"Encountered trap '{self.grid[new_position[0]][new_position[1]]}' that removes treasures. Ending search.")
+                            encountered_remove_treasures_trap = True
+                            break
+
+            if encountered_remove_treasures_trap:
+                # End search if a trap that removes treasures is encountered
+                print("Search ended due to encountering trap that removes treasures.")
+                break
 
         return total_cost
 
-    def insert_sorted(self, queue, item):
-        """
-        Insert an item into the queue maintaining sorted order.
-
-        :param queue: The priority queue list.
-        :param item: The item to insert.
-        """
-        for i in range(len(queue)):
-            if item[0] < queue[i][0]:
-                queue.insert(i, item)
-                return
-        queue.append(item)
-
     def print_grid(self):
-        """
-        Print the current state of the grid with a legend for symbols.
-        """
+        # Print the current state of the grid
         legend = {
             'Treasure': 'T',
             'Reward1': 'R1',
@@ -132,19 +157,39 @@ class VirtualWorld:
             print(line)
 
 def randomize_grid(grid):
+    # Randomize the grid, except for the initial spawn positions
     flat_grid = [item for row in grid for item in row]
-    random.shuffle(flat_grid)  # Shuffle the grid elements randomly
-    randomized_grid = [flat_grid[i:i + len(grid[0])] for i in range(0, len(flat_grid), len(grid[0]))]
-    return randomized_grid
 
-# Define the initial grid and effects
+    no_spawn_positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
+
+    items_to_randomize = []
+    for r in range(len(grid)):
+        for c in range(len(grid[0])):
+            if (r, c) not in no_spawn_positions:
+                items_to_randomize.append(grid[r][c])
+
+    random.shuffle(items_to_randomize)
+
+    index = 0
+    for r in range(len(grid)):
+        for c in range(len(grid[0])):
+            if (r, c) not in no_spawn_positions:
+                grid[r][c] = items_to_randomize[index]
+                index += 1
+
+    return grid
+
+# Initial grid setup
 initial_grid = [
-    ['Empty', 'Empty', 'Trap1', 'Empty', 'Reward1', 'Empty', 'Trap2', 'Empty'],
-    ['Empty', 'Obstacle', 'Empty', 'Empty', 'Empty', 'Obstacle', 'Empty', 'Trap3'],
-    ['Reward2', 'Empty', 'Empty', 'Obstacle', 'Empty', 'Trap4', 'Empty', 'Treasure'],
-    ['Empty', 'Empty', 'Empty', 'Empty', 'Obstacle', 'Empty', 'Empty', 'Empty']
+    ['Empty','Empty','Empty','Reward1','Empty','Empty','Empty', 'Empty','Empty','Empty'],
+    ['Empty','Trap2','Empty','Trap4','Treasure','Empty','Trap3','Empty','Obstacle','Empty'],
+    ['Empty','Empty','Obstacle','Empty','Obstacle','Empty','Empty','Reward2','Trap1','Empty'],
+    ['Obstacle','Reward1','Empty','Obstacle','Empty','Trap3','Obstacle','Treasure','Empty','Treasure'],
+    ['Empty','Empty','Trap2','Treasure','Obstacle','Empty','Obstacle','Obstacle','Empty','Empty'],
+    ['Empty','Empty','Empty','Empty','Empty','Reward2','Empty','Empty','Empty','Empty']
 ]
 
+# Define traps and their effects
 traps = {
     'Trap1': 'increase_gravity',
     'Trap2': 'decrease_speed',
@@ -152,25 +197,26 @@ traps = {
     'Trap4': 'remove_treasures'
 }
 
+# Define rewards and their effects
 rewards = {
     'Reward1': 'decrease_gravity',
     'Reward2': 'increase_speed'
 }
 
+# Entry point in the grid
 entry = (0, 0)
 
-# Randomize the grid and find all treasures and rewards
+# Randomize the grid
 grid = randomize_grid(initial_grid)
+
+# Create an instance of the VirtualWorld
 virtual_world = VirtualWorld(grid, traps, rewards, entry)
 
-# Print initial grid state
+# Print the initial grid state
 virtual_world.print_grid()
 
-# Run the GBFS algorithm
+# Run the greedy best-first search algorithm to find all treasures
 total_cost = virtual_world.gbfs()
 
-# Print final grid state
-virtual_world.print_grid()
-
+# Print the grid state after the search
 print(f"\nTotal cost to find all treasures: {total_cost}")
-
